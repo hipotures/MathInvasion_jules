@@ -27,6 +27,7 @@ class Game {
         this.lastTime = 0;
         this.gameLoopId = null;
         this.isPaused = false; // To pause game when window loses focus
+        this.eventEmitter = null; // Will be initialized in init()
 
         // Game systems and managers will be initialized here
         this.canvasSystem = null;
@@ -61,21 +62,41 @@ class Game {
             return;
         }
         this.ctx = this.canvas.getContext('2d');
-        this.gameWidth = this.canvas.width; // Or set a default and update canvas
+        this.gameWidth = this.canvas.width; 
         this.gameHeight = this.canvas.height;
 
         // TD-PLAN: The loop should be paused when the window loses focus.
         window.addEventListener('blur', () => this.pauseGame());
         window.addEventListener('focus', () => this.resumeGame());
         
-        // Initialize other systems (stubs for now)
-        // this.canvasSystem = new CanvasSystem(this.canvas);
-        // this.inputSystem = new InputSystem(this.canvas);
-        // this.cameraSystem = new CameraSystem(this.ctx, this.gameWidth, this.gameHeight);
-        // this.mapSystem = new MapSystem(this.ctx, 10, 10, 60); // Example: 10x10 grid, 60px cells
-        // this.uiManager = new UIManager();
-        // this.cashManager = new CashManager(100, this.uiManager); // Initial cash: 100
-        // ... and so on for other managers/systems
+        // Initialize EventEmitter
+        if (typeof EventEmitter !== 'undefined') {
+            this.eventEmitter = new EventEmitter();
+        } else {
+            console.error("EventEmitter class not found! Game events will not work.");
+            this.eventEmitter = { 
+                on: (eventName, handler) => console.warn(`Dummy Emitter: Registered ${eventName}`), 
+                emit: (eventName, data) => console.warn(`Dummy Emitter: Emitted ${eventName} with data:`, data) 
+            };
+        }
+        
+        // Listen for player base destruction
+        // PlayerBase emits 'playerBaseDestroyed' via mapSystem.eventEmitter.
+        // This assumes the Game's eventEmitter is passed to MapSystem, and then to PlayerBase.
+        this.eventEmitter.on('playerBaseDestroyed', () => this.triggerGameOver());
+
+        // Initialize other systems (stubs for now - will be filled in other subtasks)
+        // this.uiManager = new UIManager(this.eventEmitter);
+        // this.canvasSystem = new CanvasSystem('game-canvas', this.eventEmitter);
+        // this.inputSystem = new InputSystem(this.canvasSystem.getCanvas(), this.eventEmitter, this.cameraSystem);
+        // this.cameraSystem = new CameraSystem(this.ctx, this.gameWidth, this.gameHeight, this.eventEmitter);
+        // this.mapSystem = new MapSystem(this.ctx, 20, 15, 40, this.eventEmitter); // Example: 20x15 grid, 40px cells
+        // this.cashManager = new CashManager(100, this.uiManager, this.eventEmitter);
+        // this.playerBase = new PlayerBase(10, 7, this.mapSystem, 100, this.eventEmitter); // Pass emitter if PlayerBase uses it directly
+        // this.enemyManager = new EnemyManager(this.mapSystem, this.cashManager, this.playerBase, this.eventEmitter);
+        // this.waveManager = new WaveManager(this.mapSystem, this.enemyManager, this.uiManager, this.eventEmitter);
+        // this.munitionsManager = new MunitionsManager(this.eventEmitter);
+        // this.towerPlacementSystem = new TowerPlacementSystem(this.mapSystem, this.cashManager, this.enemyManager, this.munitionsManager, this.inputSystem, this.uiManager, this.eventEmitter);
 
         this.lastTime = performance.now();
         this.lastUpdateTime = this.lastTime;
@@ -94,8 +115,17 @@ class Game {
             const deltaTime = currentTime - this.lastTime;
             this.lastTime = currentTime;
 
-            if (this.isPaused || this.gameOver) {
-                return; // Skip update and draw if paused or game over
+            // If game is paused, skip updates and drawing.
+            if (this.isPaused) {
+                return;
+            }
+
+            // If game is over, skip updates, but drawing might continue for a game over screen.
+            // For now, the current logic stops drawing as well by returning.
+            // This fulfills "skip update()".
+            if (this.gameOver) {
+                // Potentially, call a specific drawGameOver() method here if needed.
+                return; 
             }
 
             this.accumulatedTime += deltaTime;
@@ -115,18 +145,17 @@ class Game {
 
     update(dt) {
         // console.log("Game update, dt:", dt);
-        // Update game logic here
-        // this.cameraSystem.update(dt);
-        // this.inputSystem.update(); // Process inputs
-        // this.waveManager.update(dt);
-        // this.enemyManager.update(dt, this.mapSystem);
-        // this.munitionsManager.update(dt);
-        // this.towerPlacementSystem.update(this.inputSystem.getMousePos(), this.mapSystem);
+        // Update game logic here (Order of updates can be important)
+        // if (this.cameraSystem) this.cameraSystem.update(dt); // Handles keyboard panning if inputSystem is passed to it
+        // if (this.inputSystem) this.inputSystem.update(); // Process inputs
+        // if (this.waveManager) this.waveManager.update(dt);
+        // if (this.enemyManager) this.enemyManager.updateEnemies(dt);
+        // if (this.munitionsManager) this.munitionsManager.updateMunitions(dt);
+        // // Towers update: if (this.towers) this.towers.forEach(tower => tower.update(dt));
+        // if (this.towerPlacementSystem) this.towerPlacementSystem.update(dt);
+        // if (this.playerBase) this.playerBase.update(dt);
 
-        // Check for game over condition
-        // if (this.playerBase && this.playerBase.hp <= 0 && !this.gameOver) {
-        //     this.triggerGameOver();
-        // }
+        // Game over is now event-driven by playerBase.hp <= 0
     }
 
     draw() {
@@ -137,55 +166,68 @@ class Game {
         this.ctx.fillRect(0, 0, this.gameWidth, this.gameHeight);
 
         // Apply camera transformations
-        // this.cameraSystem.applyTransformations();
+        // if (this.cameraSystem) this.cameraSystem.applyTransformations();
 
         // Draw game elements in order
-        // this.mapSystem.drawGrid();
-        // this.mapSystem.drawTerrain();
-        // this.munitionsManager.draw(this.ctx);
-        // this.enemyManager.draw(this.ctx);
-        // this.towerPlacementSystem.draw(this.ctx); // For tower preview
+        // if (this.mapSystem) {
+        //     this.mapSystem.drawGrid();
+        //     this.mapSystem.drawTerrain();
+        // }
+        // if (this.playerBase) this.playerBase.draw(this.ctx);
+        // if (this.enemyManager) this.enemyManager.drawEnemies(this.ctx);
+        // if (this.munitionsManager) this.munitionsManager.drawMunitions(this.ctx);
+        // // if (this.towers) this.towers.forEach(tower => tower.draw(this.ctx));
+        // if (this.towerPlacementSystem) this.towerPlacementSystem.draw(this.ctx);
+
 
         // Restore context if camera transformed it
-        // this.cameraSystem.restoreTransformations();
+        // if (this.cameraSystem) this.cameraSystem.restoreTransformations();
         
-        // Draw UI elements on top if they are part of the canvas (though most are HTML)
+        // Draw UI elements on top if they are part of the canvas (though most are HTML based in this plan)
     }
 
     pauseGame() {
         if (!this.isPaused) {
             this.isPaused = true;
             console.log("Game paused.");
-            // Optionally, display a pause message via UIManager
-            // if (this.uiManager) this.uiManager.showSnackbar("Game Paused. Click to resume.", 0);
+            // if (this.uiManager) this.uiManager.showSnackbar("Game Paused. Click to resume.", 0, true);
         }
     }
 
     resumeGame() {
         if (this.isPaused) {
             this.isPaused = false;
-            this.lastTime = performance.now(); // Reset lastTime to avoid large deltaTime jump
+            this.lastTime = performance.now(); 
             this.lastUpdateTime = this.lastTime;
-            this.accumulatedTime = 0; // Reset accumulated time
+            this.accumulatedTime = 0; 
             console.log("Game resumed.");
-            // if (this.uiManager) this.uiManager.hideSnackbar();
-            // this.startGameLoop(); // Restart loop if it was fully stopped, or just let it continue if using isPaused flag
+            // if (this.uiManager) this.uiManager.hideSnackbar(true);
         }
     }
 
     triggerGameOver() {
+        if (this.gameOver) return; // Already game over
+
         this.gameOver = true;
-        console.log("Game Over!");
-        // Stop game updates, wave spawning, etc.
-        // if (this.waveManager) this.waveManager.stop();
-        // Display game over screen via UIManager
-        // if (this.uiManager) this.uiManager.showGameOverScreen();
-        if (this.gameLoopId) {
-            // We might not want to completely cancel the animation frame
-            // if we want to show a game over screen that might have animations
-            // but for now, we stop processing updates. Draw might continue for the GO screen.
-            console.log("Game loop processing effectively stopped due to game over.");
+        console.log("Game Over triggered!");
+
+        // Stop wave spawning
+        if (this.waveManager && typeof this.waveManager.stop === 'function') {
+            this.waveManager.stop();
+            // console.log("WaveManager stopped by Game Over."); // Logged by WaveManager.stop()
+        } else {
+            console.warn("Game.triggerGameOver: WaveManager not available or stop() method missing.");
         }
+
+        // Display game over screen
+        if (this.uiManager && typeof this.uiManager.showGameOverScreen === 'function') {
+            this.uiManager.showGameOverScreen();
+            // console.log("Game Over screen displayed by UIManager."); // Logged by UIManager
+        } else {
+            console.warn("Game.triggerGameOver: UIManager not available or showGameOverScreen() method missing.");
+        }
+        
+        console.log("Game.triggerGameOver: Game updates will now cease.");
     }
 }
 
